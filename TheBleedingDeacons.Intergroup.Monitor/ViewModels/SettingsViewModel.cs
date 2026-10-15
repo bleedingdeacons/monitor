@@ -1,0 +1,354 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Serilog;
+using TheBleedingDeacons.Intergroup.Monitor.Models;
+using TheBleedingDeacons.Intergroup.Monitor.Support;
+using TheBleedingDeacons.Intergroup.Monitor.Services.Interfaces;
+
+namespace TheBleedingDeacons.Intergroup.Monitor.ViewModels;
+
+/// <summary>
+/// Where the server is, what this handset is called, and which build is
+/// running.
+/// </summary>
+public sealed partial class SettingsViewModel : ObservableObject
+{
+	private readonly IConfigurationService _configuration;
+	private readonly IDeviceAuthService _auth;
+	private readonly IAlertService _alerts;
+	private readonly IAppLock _lock;
+	private readonly IPushRegistrar _push;
+	private readonly INotificationPermission _notifications;
+
+
+	/// <summary>
+	/// Whether <see cref="ApplyAsync"/> is already running. See the toggle
+	/// handlers on why re-entrancy is the normal case rather than a race.
+	/// </summary>
+	private bool _applying;
+
+	public SettingsViewModel(
+		IConfigurationService configuration,
+		IDeviceAuthService auth,
+		IAlertService alerts,
+		IAppLock appLock,
+		IPushRegistrar push,
+		INotificationPermission notifications)
+	{
+		_configuration = configuration;
+		_auth = auth;
+		_alerts = alerts;
+		_lock = appLock;
+		_push = push;
+		_notifications = notifications;
+
+		// <b>Held shut while the stored values are loaded in.</b> Setting
+		// these raises the toggle handlers, which apply — so a handset with
+		// the fingerprint lock already on would ask for a fingerprint while
+		// the settings page was still being constructed, before anybody had
+		// touched anything. See ApplyAsync.
+		_applying = true;
+
+		var sentinel = _configuration.GetSentinelConfiguration();
+		BaseUrl = sentinel.BaseUrl;
+		PollSeconds = sentinel.PollSeconds;
+		Poll = sentinel.Poll;
+		DeviceLabel = _configuration.DeviceLabel;
+		RequireFingerprint = _configuration.AppLockEnabled;
+
+		_applying = false;
+	}
+
+	/// <summary>
+	/// Find out whether this handset can ask for a fingerprint at all.
+	///
+	/// <para>Not in the constructor because the answer is asynchronous on
+	/// at least one head, and not cached across visits because a responder
+	/// who has just been to the phone's own settings to enrol a finger
+	/// should find the checkbox live when they come back.</para>
+	/// </summary>
+	public async Task LoadAsync()
+	{
+		try
+		{
+			// ConfigureAwait(true): called from OnAppearing, and the property
+			// set below drives a checkbox on screen.
+			FingerprintAvailable = await _lock.IsAvailableAsync().ConfigureAwait(true);
+		}
+		catch (Exception ex)
+		{
+			Log.Warning(ex, "Fingerprint availability could not be read");
+			FingerprintAvailable = false;
+		}
+
+		await RefreshPushAsync().ConfigureAwait(true);
+	}
+
+	/// <summary>
+	/// Work out whether push is both available and enabled, and say so.
+	///
+	/// <para>Read on every visit rather than cached, for the same reason
+	/// the fingerprint is: the two ways this goes wrong are both fixed
+	/// somewhere other than in Monitor — notifications are switched back on
+	/// from the phone's own settings, and a registration is restored by
+	/// signing in again — so a responder who has just gone and done one of
+	/// them must find the indicator agreeing with them when they come
+	/// back.</para>
+	///
+	/// <para>The registration half is Sentinel's own answer, taken from the
+	/// session it returned, not from whether this side holds a token.
+	/// Those disagree in exactly the case worth catching: a handset with a
+	/// perfectly good FCM token that the server was never told about.
+	/// </para>
+	/// </summary>
+	private async Task RefreshPushAsync()
+	{
+		// ConfigureAwait(true): the property set below drives a label and a
+		// coloured dot on screen.
+		var permitted = await _notifications.IsGrantedAsync().ConfigureAwait(true);
+
+		Push = new PushStatus(
+			Supported: _push.Provider.Length > 0,
+			Permitted: permitted,
+			Registered: !string.IsNullOrEmpty(_auth.Current?.PushProvider));
+
+		Log.Debug("Push indicator reports {State}", Push.State);
+	}
+
+	[ObservableProperty]
+	public partial string BaseUrl { get; set; } = string.Empty;
+
+	[ObservableProperty]
+	public partial int PollSeconds { get; set; }
+
+	/// <summary>
+	/// Whether this handset asks Sentinel for alerts as well as listening.
+	/// See <see cref="Models.SentinelConfiguration.Poll"/> for what turning
+	/// it off costs.
+	/// </summary>
+	[ObservableProperty]
+	public partial bool Poll { get; set; } = true;
+
+	[ObservableProperty]
+	public partial string DeviceLabel { get; set; } = string.Empty;
+
+	/// <summary>
+	/// Whether opening Monitor should ask for a fingerprint first.
+	///
+	/// <para>Applied the moment it is ticked, and proved before it is
+	/// stored — see <see cref="ApplyAsync"/> for why turning it on asks
+	/// for the fingerprint there and then.</para>
+	/// </summary>
+	[ObservableProperty]
+	public partial bool RequireFingerprint { get; set; }
+
+	/// <summary>
+	/// Whether there is a fingerprint on this handset to ask for. False
+	/// leaves the checkbox on screen but disabled: a setting that
+	/// disappears is a setting a responder thinks they imagined.
+	/// </summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(FingerprintUnavailable))]
+	public partial bool FingerprintAvailable { get; set; }
+
+	public bool FingerprintUnavailable => !FingerprintAvailable;
+
+
+	[ObservableProperty]
+	public partial string StatusMessage { get; set; } = string.Empty;
+
+	public string Responder => _auth.Current?.Responder ?? "Not signed in";
+
+	/// <summary>
+	/// Whether push is available on this platform and enabled on this
+	/// phone, as one thing the screen can draw.
+	///
+	/// <para>This replaced a one-line "Push" / "Polling" label. That line
+	/// read the same for a handset with no push transport as for one whose
+	/// owner had switched Monitor's notifications off — two states with
+	/// nothing in common, one of which is a responder's own phone quietly
+	/// swallowing every alert. See <see cref="PushStatus"/>.</para>
+	///
+	/// <para>Flattened onto three properties rather than left as a nested
+	/// binding path, because this project compiles its XAML bindings and
+	/// keeps them shallow; see <see cref="PushHeadline"/> and its
+	/// neighbours.</para>
+	/// </summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(PushHeadline))]
+	[NotifyPropertyChangedFor(nameof(PushDetail))]
+	[NotifyPropertyChangedFor(nameof(PushIndicatorColour))]
+	public partial PushStatus Push { get; set; } = PushStatus.Unknown;
+
+	public string PushHeadline => Push.Headline;
+
+	public string PushDetail => Push.Detail;
+
+	public string PushIndicatorColour => Push.IndicatorColour;
+
+	/// <summary>
+	/// Version, build number, build timestamp and runtime, exactly as the
+	/// startup log banner reports them, so a support conversation and the
+	/// live tail agree about which build is on a handset.
+	///
+	/// <para><b>Instance, not static.</b> It was static, and the label on
+	/// the settings screen was therefore blank: a XAML Binding resolves
+	/// against the BindingContext <i>instance</i> and cannot see static
+	/// members, so it bound to nothing. It failed silently in both
+	/// directions — no build warning, because a binding to a missing
+	/// member is only a compile error when the compiler can prove the
+	/// type, and nothing on screen to notice, because an empty label
+	/// looks like an empty label.</para>
+	/// </summary>
+	public string Build => BuildInfo.Summary;
+
+	/// <summary>
+	/// Store what is on screen, and make it take effect.
+	///
+	/// <para><b>There is no Save button any more.</b> A settings page with
+	/// one has two states — what is on screen and what is in force — and
+	/// nothing on a handset says which you are looking at. A responder who
+	/// changed the poll interval, was interrupted, and came back to a page
+	/// still showing their change had no way to tell it had never been
+	/// applied. So the toggles apply as they are set and the text fields
+	/// apply when they are left; see the callers.</para>
+	///
+	/// <para><b>Idempotent, and safe to call when nothing changed.</b> The
+	/// page calls it on the way out as well, because a responder can type
+	/// into a field and navigate away without ever unfocusing it.</para>
+	/// </summary>
+	public async Task ApplyAsync()
+	{
+		if (_applying)
+		{
+			return;
+		}
+
+		_applying = true;
+
+		try
+		{
+			var configuration = _configuration.GetSentinelConfiguration();
+			configuration.BaseUrl = BaseUrl;
+			configuration.PollSeconds = PollSeconds;
+			configuration.Poll = Poll;
+
+			await _configuration.SaveSentinelConfigurationAsync(configuration).ConfigureAwait(false);
+			_configuration.DeviceLabel = DeviceLabel;
+
+			// Turning the lock on is proved before it is stored. A responder
+			// who ticks this box and only discovers at the next launch that
+			// the sensor will not take their finger has been let down by this
+			// screen rather than by the sensor — so the ask happens here,
+			// while there is somebody looking at it who can be told. Turning
+			// it off is not proved: nobody has to prove they are allowed to
+			// make a handset easier to open, and requiring it would trap a
+			// responder whose finger has stopped working.
+			string? lockRefusal = null;
+
+			if (RequireFingerprint && !_configuration.AppLockEnabled)
+			{
+				var result = await _lock
+					.AuthenticateAsync("Confirm the fingerprint that will open Monitor")
+					.ConfigureAwait(false);
+
+				lockRefusal = result switch
+				{
+					AppLockResult.Unlocked => null,
+					AppLockResult.Unavailable =>
+						"The fingerprint lock is off: this handset cannot ask for one.",
+					_ =>
+						"The fingerprint lock is off: the fingerprint was not confirmed.",
+				};
+			}
+
+			_configuration.AppLockEnabled = RequireFingerprint && lockRefusal is null;
+
+			// Re-read so the fields show what was actually stored after
+			// clamping and normalisation, rather than what was typed.
+			var saved = _configuration.GetSentinelConfiguration();
+			BaseUrl = saved.BaseUrl;
+			PollSeconds = saved.PollSeconds;
+			Poll = saved.Poll;
+			RequireFingerprint = _configuration.AppLockEnabled;
+
+			// The poll interval and whether to poll at all are both read
+			// when the loop starts, so a change to either only takes
+			// effect on a restart of it. Stopping and starting is also
+			// what turns the loop off: StartAsync declines to run one
+			// when polling is disabled.
+			await _alerts.StopAsync().ConfigureAwait(false);
+			await _alerts.StartAsync().ConfigureAwait(false);
+
+			// Silent when it worked. With no Save button there is no moment
+			// to confirm, and a page that said "Saved." every time a field
+			// lost focus would be a page that cried it constantly. The
+			// message is kept for the two things a responder does need
+			// telling: a refused fingerprint, and a failure.
+			StatusMessage = lockRefusal ?? string.Empty;
+		}
+		catch (Exception ex)
+		{
+			Log.Error(ex, "Settings could not be saved");
+			StatusMessage = "Could not save those settings.";
+		}
+		finally
+		{
+			_applying = false;
+		}
+	}
+
+	/// <summary>
+	/// Apply as soon as a switch or a checkbox moves.
+	///
+	/// <para>A toggle is a finished decision the moment it is made, unlike
+	/// a half-typed address — so these do not wait to lose focus. Fire and
+	/// forget because a property setter cannot await, and
+	/// <see cref="ApplyAsync"/> owns its own errors.</para>
+	///
+	/// <para>The guard inside <see cref="ApplyAsync"/> is what stops this
+	/// looping: applying re-reads the stored values and writes them back to
+	/// these same properties, which raises these again.</para>
+	/// </summary>
+	partial void OnPollChanged(bool value) => _ = ApplyAsync();
+
+	partial void OnRequireFingerprintChanged(bool value) => _ = ApplyAsync();
+
+
+	[RelayCommand]
+	private async Task SignOutAsync()
+	{
+		try
+		{
+			// Asked before anything happens, and worded as what it costs
+			// rather than as what it is. Signing out is the one control on
+			// this page that silences the handset for the rest of the shift,
+			// it cannot be undone without a working sign-in, and nothing
+			// afterwards will point out that the phone has gone quiet — so
+			// the responder is told here, while it is still their choice.
+			var confirmed = await MainThread.InvokeOnMainThreadAsync(
+				() => Shell.Current.DisplayAlertAsync(
+					"Sign out and stop alerts?",
+					"This handset comes off the rota. It will stop receiving helpline alerts — it will not ring, and nothing will tell you it has gone quiet. You will need to sign in again to put it back on duty.",
+					"Sign out",
+					"Stay on duty")).ConfigureAwait(false);
+
+			if (!confirmed)
+			{
+				StatusMessage = "Still signed in.";
+				return;
+			}
+
+			await _alerts.StopAsync().ConfigureAwait(false);
+			await _auth.SignOutAsync().ConfigureAwait(false);
+
+			await MainThread.InvokeOnMainThreadAsync(
+				() => Shell.Current.GoToAsync("//signin")).ConfigureAwait(false);
+		}
+		catch (Exception ex)
+		{
+			Log.Error(ex, "Sign-out failed");
+			StatusMessage = "Could not sign out.";
+		}
+	}
+}

@@ -28,11 +28,11 @@
 
 set -euo pipefail
 
-target=TheBleedingDeacons.Intergroup.Hand/Platforms/iOS/GoogleService-Info.plist
-expected_bundle=org.thebleedingdeacons.intergroup.hand
+target=TheBleedingDeacons.Intergroup.Monitor/Platforms/iOS/GoogleService-Info.plist
+expected_bundle=org.thebleedingdeacons.intergroup.monitor
 
 if [ -z "${GOOGLE_SERVICES_PLIST:-}" ]; then
-	echo 'GOOGLE_SERVICES_PLIST is not set; building without Firebase.'
+	echo 'GOOGLE_SERVICES_PLIST (the MONITOR_GOOGLE_SERVICES_PLIST secret) is not set; building without Firebase.'
 	echo 'The app will enrol POLL-ONLY: alerts arrive on the poll interval while'
 	echo 'it is running, and a handset with the app closed will not ring.'
 	echo 'Set it as a repository secret to build an artifact with working push.'

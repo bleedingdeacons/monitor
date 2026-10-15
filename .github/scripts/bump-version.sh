@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Computes the next version from the commits just merged to main, and writes it
-# into the Hand csproj.
+# into the Monitor csproj.
 #
 # Ported from Register's script of the same name, deliberately: the two apps
 # are MAUI heads with the identical version shape, and a second dialect would
@@ -32,7 +32,7 @@
 #
 set -euo pipefail
 
-CSPROJ="TheBleedingDeacons.Intergroup.Hand/TheBleedingDeacons.Intergroup.Hand.csproj"
+CSPROJ="TheBleedingDeacons.Intergroup.Monitor/TheBleedingDeacons.Intergroup.Monitor.csproj"
 RANGE="${1:-}"
 
 if [ -z "$RANGE" ]; then
@@ -53,13 +53,13 @@ emit() { # emit <key> <value> — GitHub output when in CI, otherwise just echo
 # Never bump on top of a bump. Closes two cases: the push this workflow makes
 # itself, which would otherwise loop, and a manual re-run of an older push.
 #
-# HAND_BUMP_ON_VERSION_COMMIT=1 lifts the guard, and only the push-retry loop
+# MONITOR_BUMP_ON_VERSION_COMMIT=1 lifts the guard, and only the push-retry loop
 # in ci.yml's version job sets it. That path has already reset onto a main
 # whose tip *is* somebody else's version commit, and its whole purpose is to
 # recompute its own bump from that new base — precisely what this guard would
 # otherwise refuse. It is bounded by that loop's three attempts, so lifting it
 # cannot run away. Nothing else should ever set it.
-if [ "${HAND_BUMP_ON_VERSION_COMMIT:-}" != "1" ]; then
+if [ "${MONITOR_BUMP_ON_VERSION_COMMIT:-}" != "1" ]; then
     head_subject="$(git log -1 --format='%s')"
     case "$head_subject" in
         "chore: version "*)
