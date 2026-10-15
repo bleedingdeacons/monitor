@@ -465,7 +465,7 @@ Properties/launchSettings.json
 *.p12
 *.pfx
 
-# ── Hand-specific ───────────────────────────────────────────
+# ── Monitor-specific ───────────────────────────────────────────
 #
 # appsettings.json and devsettings.json both stay ignored (the inherited
 # rules above already cover them). appsettings.json carries real
@@ -488,17 +488,17 @@ Properties/launchSettings.json
 # nothing left to trade off.
 #
 # appsettings.example.json is tracked instead: same shape, no values.
-!TheBleedingDeacons.Intergroup.Hand/appsettings.example.json
+!TheBleedingDeacons.Intergroup.Monitor/appsettings.example.json
 
 # launchSettings.json is normally ignored (line 427) because it usually
 # holds developer-local settings - ports, environment variables, machine
-# paths. Hand's holds neither: it is the two launch profiles the Windows
+# paths. Monitor's holds neither: it is the two launch profiles the Windows
 # head needs to be debuggable at all. Without the MsixPackage profile,
 # Visual Studio refuses to start that head with "launchSettings.json does
 # not contain a profile with commandName 'MsixPackage'", so a fresh clone
 # cannot debug Windows until someone works out what to write. Register
 # tracks its copy for the same reason.
-!TheBleedingDeacons.Intergroup.Hand/Properties/launchSettings.json
+!TheBleedingDeacons.Intergroup.Monitor/Properties/launchSettings.json
 
 # google-services.json is ignored by default.
 #
@@ -512,18 +512,18 @@ Properties/launchSettings.json
 # and the build treats it as optional. Un-ignore it deliberately if you
 # would rather CI produce a push-capable APK - and check the key's
 # restrictions in the Google Cloud console first.
-TheBleedingDeacons.Intergroup.Hand/Platforms/Android/google-services.json
+TheBleedingDeacons.Intergroup.Monitor/Platforms/Android/google-services.json
 
 
 # GoogleService-Info.plist is the Apple counterpart, ignored for exactly
 # the same reasons - see above. It carries an API key and a project number,
 # Google expects it to ship inside every app bundle, and the build treats it
 # as optional: without it the iOS head enrols poll-only rather than failing.
-TheBleedingDeacons.Intergroup.Hand/Platforms/iOS/GoogleService-Info.plist
+TheBleedingDeacons.Intergroup.Monitor/Platforms/iOS/GoogleService-Info.plist
 
 
 # Reqnroll generates a .feature.cs beside every .feature file in
-# Hand.Specs. It is build output — regenerated from the feature file on
+# Monitor.Specs. It is build output — regenerated from the feature file on
 # every build — and committing it would put a 30KB generated diff next to
 # every three-line change to a scenario.
 *.feature.cs

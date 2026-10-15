@@ -1,7 +1,7 @@
 <Project>
 
   <!--
-    Repo-wide build settings for Hand.
+    Repo-wide build settings for Monitor.
 
     Deliberately the same shape as Register's: StyleCop.Analyzers +
     Meziantou.Analyzer wired in here so every project in the tree is

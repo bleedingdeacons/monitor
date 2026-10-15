@@ -1,0 +1,259 @@
+using System.Text.Json;
+using TheBleedingDeacons.Intergroup.Monitor.Models;
+using Xunit;
+
+namespace TheBleedingDeacons.Intergroup.Monitor.Tests;
+
+/// <summary>
+/// <see cref="SentinelConfiguration"/>: where the server is and how often to
+/// ask it.
+/// </summary>
+public sealed class SentinelConfigurationTests
+{
+	[Theory]
+	[InlineData("https://aa-bristol.org/", true)]
+	[InlineData("http://localhost:8080/", false)]
+	[InlineData("https://aa-bristol.org/wp", true)]
+	[InlineData("", false)]
+	[InlineData("   ", false)]
+	[InlineData("aa-bristol.org", false)]
+	[InlineData("ftp://aa-bristol.org/", false)]
+	[InlineData("monitor://auth", false)]
+	public void IsValid_AcceptsOnlyAnAbsoluteHttpsUrl(string baseUrl, bool expected) =>
+		Assert.Equal(expected, new SentinelConfiguration { BaseUrl = baseUrl }.IsValid());
+
+	/// <summary>
+	/// The trailing slash is not cosmetic. <c>new Uri(base, relative)</c>
+	/// discards the last path segment of a base that does not end in one,
+	/// so a WordPress install in a subdirectory would silently lose it.
+	/// </summary>
+	[Fact]
+	public void Normalised_AddsTheTrailingSlashThatSubdirectoryInstallsDependOn()
+	{
+		var normalised = new SentinelConfiguration { BaseUrl = "https://aa-bristol.org/wp" }.Normalised();
+
+		Assert.Equal("https://aa-bristol.org/wp/", normalised.BaseUrl);
+		Assert.Equal(
+			"https://aa-bristol.org/wp/wp-json/sentinel/v1/alerts",
+			new Uri(new Uri(normalised.BaseUrl), "wp-json/sentinel/v1/alerts").ToString());
+	}
+
+	[Fact]
+	public void Normalised_LeavesAnExistingTrailingSlashAlone() =>
+		Assert.Equal(
+			"https://aa-bristol.org/",
+			new SentinelConfiguration { BaseUrl = "https://aa-bristol.org/" }.Normalised().BaseUrl);
+
+	[Fact]
+	public void Normalised_TrimsWhitespace() =>
+		Assert.Equal(
+			"https://aa-bristol.org/",
+			new SentinelConfiguration { BaseUrl = "  https://aa-bristol.org/  " }.Normalised().BaseUrl);
+
+	/// <summary>An empty address stays empty — that is "not configured".</summary>
+	[Fact]
+	public void Normalised_DoesNotTurnAnEmptyAddressIntoASlash() =>
+		Assert.Equal(string.Empty, new SentinelConfiguration { BaseUrl = "  " }.Normalised().BaseUrl);
+
+	/// <summary>
+	/// A mistyped interval is a handset that either hammers the server or
+	/// misses its shift, so it is clamped rather than trusted.
+	/// </summary>
+	[Theory]
+	[InlineData(0, 5)]
+	[InlineData(-30, 5)]
+	[InlineData(4, 5)]
+	[InlineData(5, 5)]
+	[InlineData(20, 20)]
+	[InlineData(300, 300)]
+	[InlineData(86400, 300)]
+	public void Normalised_ClampsThePollInterval(int given, int expected) =>
+		Assert.Equal(expected, new SentinelConfiguration { PollSeconds = given }.Normalised().PollSeconds);
+
+	[Fact]
+	public void Normalised_CarriesMeetingModeThrough()
+	{
+		Assert.False(new SentinelConfiguration { InMeeting = false }.Normalised().InMeeting);
+		Assert.True(new SentinelConfiguration { InMeeting = true }.Normalised().InMeeting);
+	}
+
+	[Fact]
+	public void Normalised_ReturnsACopy()
+	{
+		var original = new SentinelConfiguration { BaseUrl = "https://aa-bristol.org", PollSeconds = 1 };
+
+		var normalised = original.Normalised();
+
+		Assert.NotSame(original, normalised);
+		Assert.Equal("https://aa-bristol.org", original.BaseUrl);
+		Assert.Equal(1, original.PollSeconds);
+	}
+
+	[Fact]
+	public void DefaultsToTwentySecondsAndAudible()
+	{
+		var configuration = new SentinelConfiguration();
+
+		Assert.Equal(20, configuration.PollSeconds);
+
+		// Off by default is the safe direction: a handset that has never
+		// been told otherwise makes a noise, and so does one restored from
+		// a backup.
+		Assert.False(configuration.InMeeting);
+	}
+
+	/// <summary>
+	/// Polling is the safety net behind push, so a handset that has never
+	/// been told otherwise must poll.
+	/// </summary>
+	[Fact]
+	public void PollsByDefault() => Assert.True(new SentinelConfiguration().Poll);
+
+	[Fact]
+	public void Normalised_CarriesPollThrough()
+	{
+		Assert.False(new SentinelConfiguration { Poll = false }.Normalised().Poll);
+		Assert.True(new SentinelConfiguration { Poll = true }.Normalised().Poll);
+	}
+}
+
+/// <summary>
+/// <see cref="BetterStackConfiguration"/>: the log shipping settings, and
+/// the endpoint normalisation that Register learned the hard way.
+/// </summary>
+public sealed class BetterStackConfigurationTests
+{
+	/// <summary>
+	/// Better Stack's dashboard shows the ingest address as a bare
+	/// hostname, so that is what gets pasted in. Without the scheme,
+	/// <c>Uri.TryCreate</c> refuses it, the configuration reads as
+	/// invalid, and the app silently ships no logs at all.
+	/// </summary>
+	[Theory]
+	[InlineData("s123456.eu-central-1a.betterstackdata.com", "https://s123456.eu-central-1a.betterstackdata.com")]
+	[InlineData("  s123456.betterstackdata.com  ", "https://s123456.betterstackdata.com")]
+	[InlineData("https://s123456.betterstackdata.com", "https://s123456.betterstackdata.com")]
+	[InlineData("http://localhost:9000", "http://localhost:9000")]
+	public void Endpoint_GetsTheSchemeItNeedsToParse(string given, string expected) =>
+		Assert.Equal(expected, new BetterStackConfiguration { Endpoint = given }.Endpoint);
+
+	/// <summary>
+	/// Empty means "not configured", which is a supported state. It must
+	/// not become a bare "https://".
+	/// </summary>
+	[Theory]
+	[InlineData("")]
+	[InlineData("   ")]
+	[InlineData(null)]
+	public void Endpoint_StaysEmptyWhenItIsNotSet(string? given) =>
+		Assert.Equal(string.Empty, new BetterStackConfiguration { Endpoint = given! }.Endpoint);
+
+	[Fact]
+	public void IsValid_NeedsBothATokenAndAnEndpoint()
+	{
+		Assert.True(new BetterStackConfiguration { SourceToken = "t", Endpoint = "s1.betterstackdata.com" }.IsValid());
+		Assert.False(new BetterStackConfiguration { SourceToken = "", Endpoint = "s1.betterstackdata.com" }.IsValid());
+		Assert.False(new BetterStackConfiguration { SourceToken = "   ", Endpoint = "s1.betterstackdata.com" }.IsValid());
+		Assert.False(new BetterStackConfiguration { SourceToken = "t", Endpoint = "" }.IsValid());
+	}
+
+	/// <summary>
+	/// A scheme we do not recognise is left alone, and refused. So is
+	/// http://: the endpoint is editable, and BetterStackHttpClient
+	/// attaches the source token as a Bearer header on every batch.
+	/// </summary>
+	[Theory]
+	[InlineData("ftp://logs.example")]
+	[InlineData("http://logs.example")]
+	[InlineData("http://localhost:9000")]
+	public void IsValid_RefusesAnythingButHttps(string endpoint) =>
+		Assert.False(new BetterStackConfiguration { SourceToken = "t", Endpoint = endpoint }.IsValid());
+
+	[Fact]
+	public void ToLogSafe_MasksTheTokenAndKeepsTheEndpoint()
+	{
+		var safe = new BetterStackConfiguration
+		{
+			SourceToken = "a-real-secret",
+			Endpoint = "s1.betterstackdata.com",
+		}.ToLogSafe();
+
+		Assert.Equal("***", safe.SourceToken);
+		Assert.Equal("https://s1.betterstackdata.com", safe.Endpoint);
+	}
+
+	[Fact]
+	public void ToLogSafe_DoesNotInventAMaskForAnAbsentToken() =>
+		Assert.Equal(string.Empty, new BetterStackConfiguration().ToLogSafe().SourceToken);
+}
+
+/// <summary>
+/// <see cref="DeviceSession"/> and <see cref="SentinelResult{T}"/> — what
+/// Sentinel says about this handset, and how the answer is carried.
+/// </summary>
+public sealed class SessionTests
+{
+	[Fact]
+	public void DeviceSession_ReadsReachsJson()
+	{
+		const string json = """
+			{
+			  "token": "abc123",
+			  "device_id": 9,
+			  "responder": "Dave B.",
+			  "platform": "android",
+			  "push_provider": "fcm",
+			  "label": "Duty phone",
+			  "authorised": true
+			}
+			""";
+
+		var session = JsonSerializer.Deserialize<DeviceSession>(json);
+
+		Assert.NotNull(session);
+		Assert.Equal("abc123", session.Token);
+		Assert.Equal(9, session.DeviceId);
+		Assert.Equal("Dave B.", session.Responder);
+		Assert.Equal("android", session.Platform);
+		Assert.Equal("fcm", session.PushProvider);
+		Assert.Equal("Duty phone", session.Label);
+		Assert.True(session.Authorised);
+	}
+
+	/// <summary>
+	/// The session check returns no token — Sentinel cannot reissue one — so
+	/// every field has to survive being absent.
+	/// </summary>
+	[Fact]
+	public void DeviceSession_DefaultsEveryStringToEmptyRatherThanNull()
+	{
+		var session = JsonSerializer.Deserialize<DeviceSession>("""{"device_id":9}""");
+
+		Assert.NotNull(session);
+		Assert.Equal(string.Empty, session.Token);
+		Assert.Equal(string.Empty, session.Responder);
+		Assert.False(session.Authorised);
+	}
+
+	[Fact]
+	public void SentinelResult_Ok_CarriesTheValueAndNoFailure()
+	{
+		var result = SentinelResult<int>.Ok(42);
+
+		Assert.True(result.Success);
+		Assert.Equal(42, result.Value);
+		Assert.Equal(SentinelFailure.None, result.Failure);
+		Assert.Equal(string.Empty, result.Message);
+	}
+
+	[Fact]
+	public void SentinelResult_Fail_CarriesTheReasonAndNoValue()
+	{
+		var result = SentinelResult<DeviceSession>.Fail(SentinelFailure.NotEligible, "Certification lapsed.");
+
+		Assert.False(result.Success);
+		Assert.Null(result.Value);
+		Assert.Equal(SentinelFailure.NotEligible, result.Failure);
+		Assert.Equal("Certification lapsed.", result.Message);
+	}
+}

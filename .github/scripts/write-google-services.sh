@@ -31,11 +31,11 @@
 
 set -euo pipefail
 
-target=TheBleedingDeacons.Intergroup.Hand/Platforms/Android/google-services.json
-expected_package=org.thebleedingdeacons.intergroup.hand
+target=TheBleedingDeacons.Intergroup.Monitor/Platforms/Android/google-services.json
+expected_package=org.thebleedingdeacons.intergroup.monitor
 
 if [ -z "${GOOGLE_SERVICES_JSON:-}" ]; then
-	echo 'GOOGLE_SERVICES_JSON is not set; building without Firebase.'
+	echo 'GOOGLE_SERVICES_JSON (the MONITOR_GOOGLE_SERVICES_JSON secret) is not set; building without Firebase.'
 	echo 'The app will enrol POLL-ONLY: alerts arrive on the poll interval while'
 	echo 'it is running, and a handset with the app closed will not ring.'
 	echo 'Set it as a repository secret to build an artifact with working push.'

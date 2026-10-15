@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="TheBleedingDeacons.Intergroup.Monitor/TheBleedingDeacons.Intergroup.Monitor.csproj" />
+  <Project Path="TheBleedingDeacons.Intergroup.Monitor.Core/TheBleedingDeacons.Intergroup.Monitor.Core.csproj" />
+  <Project Path="TheBleedingDeacons.Intergroup.Monitor.NotificationService/TheBleedingDeacons.Intergroup.Monitor.NotificationService.csproj" />
+  <Project Path="TheBleedingDeacons.Intergroup.Monitor.Specs/TheBleedingDeacons.Intergroup.Monitor.Specs.csproj" />
+  <Project Path="TheBleedingDeacons.Intergroup.Monitor.Tests/TheBleedingDeacons.Intergroup.Monitor.Tests.csproj" />
+</Solution>

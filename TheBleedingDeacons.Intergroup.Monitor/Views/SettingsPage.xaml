@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="TheBleedingDeacons.Intergroup.Monitor.Views.SettingsPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
+    xmlns:vm="clr-namespace:TheBleedingDeacons.Intergroup.Monitor.ViewModels"
+    Title="Settings"
+    x:DataType="vm:SettingsViewModel">
+
+    <!--
+        Type on this page tracks the rest of the app. It was deliberately
+        twice this size and is no longer: the doubling made a settings
+        screen that had to be scrolled three times to reach the buttons at
+        the bottom of it, which is a poor trade for type nobody reads from
+        across a room. The duty screen is where size earns its keep.
+        
+        The sizes are still set here rather than in
+        Resources/Styles/Styles.xaml, which is shared with every other page
+        and with Register: changing the implicit Label, Entry and Button
+        styles there would resize the whole app. Entries and Buttons carry
+        explicit sizes for the same reason — they would otherwise inherit
+        that 14 and leave the page half-scaled.
+    -->
+
+    <ScrollView>
+        <VerticalStackLayout Padding="20" Spacing="16">
+
+            <Label
+                FontSize="13"
+                Opacity="0.6"
+                Text="Signed in as" />
+            <Label
+                FontAttributes="Bold"
+                FontSize="18"
+                Text="{Binding Responder}" />
+
+            <!--
+                Whether push is available on this platform and enabled on
+                this phone. A dot and a headline, with the detail
+                underneath.
+
+                It replaced a single line that said "Push" or "Polling",
+                which read identically for a Windows head that has never
+                had push and for a responder's phone whose owner had
+                switched Monitor's notifications off in error. Only one of
+                those is a handset about to swallow an alert, and the
+                colour is what separates them at a glance: green working,
+                amber still covered by the poll, red silenced, grey no
+                transport at all. See PushStatus.
+            -->
+            <HorizontalStackLayout Spacing="8">
+                <BoxView
+                    BackgroundColor="{Binding PushIndicatorColour}"
+                    CornerRadius="6"
+                    HeightRequest="12"
+                    VerticalOptions="Center"
+                    WidthRequest="12" />
+                <Label
+                    FontSize="13"
+                    Text="{Binding PushHeadline}"
+                    VerticalOptions="Center" />
+            </HorizontalStackLayout>
+            <Label
+                FontSize="12"
+                Opacity="0.6"
+                Text="{Binding PushDetail}" />
+
+            <BoxView
+                Margin="0,8"
+                HeightRequest="1"
+                Opacity="0.15" />
+
+            <Label
+                FontSize="13"
+                Opacity="0.6"
+                Text="Device name" />
+            <Entry
+                Completed="OnFieldCommitted"
+                FontSize="14"
+                IsReadOnly="True"
+                Placeholder="This handset"
+                Text="{Binding DeviceLabel}"
+                Unfocused="OnFieldCommitted" />
+
+            <Label
+                FontSize="13"
+                Opacity="0.6"
+                Text="Sentinel server address" />
+            <Entry
+                Completed="OnFieldCommitted"
+                FontSize="14"
+                IsReadOnly="True"
+                Keyboard="Url"
+                Placeholder="https://your-intergroup.example/"
+                Text="{Binding BaseUrl}"
+                Unfocused="OnFieldCommitted" />
+
+            <Label
+                FontSize="13"
+                Opacity="0.6"
+                Text="Check for alerts every (seconds)" />
+            <Entry
+                Completed="OnFieldCommitted"
+                FontSize="14"
+                Keyboard="Numeric"
+                Text="{Binding PollSeconds}"
+                Unfocused="OnFieldCommitted" />
+            <!--
+                Off means push only. Worth the warning underneath: the poll
+                is what covers a push that silently stopped working, and a
+                responder cannot tell the difference from the outside.
+            -->
+            <HorizontalStackLayout Spacing="8">
+                <CheckBox IsChecked="{Binding Poll}" VerticalOptions="Center" />
+                <Label
+                    FontSize="13"
+                    Text="Check for alerts by polling"
+                    VerticalOptions="Center" />
+            </HorizontalStackLayout>
+            <Label
+                FontSize="12"
+                Opacity="0.6"
+                Text="Leave this on. With it off, alerts arrive only when Sentinel pushes them &#8212; so if push stops working, this handset goes quiet and nothing says so." />
+
+
+            <BoxView
+                Margin="0,8"
+                HeightRequest="1"
+                Opacity="0.15" />
+
+            <!--
+                The fingerprint. Left on screen but disabled when the
+                handset has none enrolled, rather than hidden: a setting
+                that vanishes is one a responder decides they imagined.
+            -->
+            <HorizontalStackLayout Spacing="8">
+                <CheckBox
+                    IsChecked="{Binding RequireFingerprint}"
+                    IsEnabled="{Binding FingerprintAvailable}"
+                    VerticalOptions="Center" />
+                <Label
+                    FontSize="13"
+                    Text="Ask for a fingerprint to open Monitor"
+                    VerticalOptions="Center" />
+            </HorizontalStackLayout>
+            <Label
+                FontSize="12"
+                Opacity="0.6"
+                Text="Only when the app is opened cold, and never while an alert is waiting &#8212; a ringing handset always opens straight to the acknowledge button." />
+            <Label
+                FontSize="12"
+                IsVisible="{Binding FingerprintUnavailable}"
+                Opacity="0.6"
+                Text="This handset cannot be asked for a fingerprint. Either none is set up on it, or this platform gives Monitor no way to ask."
+                TextColor="#663C00" />
+
+            <BoxView
+                Margin="0,8"
+                HeightRequest="1"
+                Opacity="0.15" />
+
+            <!--
+                No Save button. A settings page with one has two states —
+                what is on screen and what is in force — and nothing on a
+                handset says which you are looking at. So the toggles apply
+                as they are set, the text fields apply as they are left,
+                and the page applies again on the way out for anything
+                typed and never unfocused. See SettingsViewModel.ApplyAsync.
+                
+                The label below is no longer a receipt. It is empty when
+                everything worked, and carries the two things a responder
+                does need telling: a refused fingerprint, and a failure.
+            -->
+            <Label
+                FontSize="13"
+                IsVisible="{Binding StatusMessage, Converter={toolkit:IsStringNotNullOrEmptyConverter}}"
+                Opacity="0.8"
+                Text="{Binding StatusMessage}" />
+
+            <!--
+                One way off this screen, and it is the one that ends the
+                shift. Red and last because of it.
+                
+                There used to be a Close button above this, which put the
+                app out of the way without taking the handset off duty. It
+                is gone: every platform already has its own way of putting
+                an app aside — the back gesture, the home button, the
+                window controls — and a button that duplicated one of them
+                sat directly above the one control here that cannot be
+                undone. Two buttons of the same size and shape, one
+                harmless and one ending the shift, is not an arrangement
+                worth keeping for a convenience the handset already
+                offers.
+            -->
+            <Button
+                BackgroundColor="#B3261E"
+                Command="{Binding SignOutCommand}"
+                FontSize="14"
+                HeightRequest="48"
+                Text="Sign out"
+                TextColor="White" />
+
+            <Label
+                FontSize="12"
+                Opacity="0.6"
+                Text="Takes this handset off the rota. It stops receiving alerts altogether &#8212; it will not ring, and nothing will say it has gone quiet. To put Monitor away and stay on duty, use the phone&#8217;s own back or home gesture instead."
+                TextColor="#663C00" />
+
+            <Label
+                Margin="0,16,0,0"
+                FontSize="11"
+                HorizontalOptions="Center"
+                Opacity="0.5"
+                Text="{Binding Build}" />
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

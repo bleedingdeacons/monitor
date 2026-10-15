@@ -9,12 +9,12 @@ name: CI
 #                    compile check. Then builds a Release APK and uploads it.
 #  * ios           — the same for the iOS head, on macOS because nothing else
 #                    can build one, and archives an unsigned .ipa.
-#  * test          — run the xUnit v3 suite over Hand.Core (the MAUI-free half
+#  * test          — run the xUnit v3 suite over Monitor.Core (the MAUI-free half
 #                    of the app) with Coverlet coverage, upload the report to
 #                    Coveralls, and then run the Reqnroll specification over the
-#                    same library. Ubuntu, no workload: Hand.Core, its tests and
+#                    same library. Ubuntu, no workload: Monitor.Core, its tests and
 #                    its specs are plain net10.0, which is the entire reason that
-#                    split exists — see Hand.Core's project file. The coverage
+#                    split exists — see Monitor.Core's project file. The coverage
 #                    figure covers the xUnit suite only, deliberately; the specs
 #                    are a gate, not a contribution to the badge.
 #  * semgrep       — a job of its own rather than a step, because the other jobs
@@ -29,7 +29,7 @@ name: CI
 # by CI at all, because the entitlements the notification service extension
 # needs force signing-identity detection and no runner has a certificate. That
 # reasoning was wrong: _DetectSigningIdentity is conditioned on EnableCodeSigning,
-# not on the entitlements. -p:HandUnsigned=true switches signing off and the
+# not on the entitlements. -p:MonitorUnsigned=true switches signing off and the
 # detection never runs. Nothing had to become conditional; the entitlements are
 # still declared unconditionally, which is where they belong.
 #
@@ -46,16 +46,16 @@ name: CI
 #    on nothing as it stands.
 #  * The APK is signed with the runner's throwaway debug keystore, which is not
 #    the one on any developer machine. It will refuse to install over a locally
-#    built Hand with INSTALL_FAILED_UPDATE_INCOMPATIBLE, and getting past that
+#    built Monitor with INSTALL_FAILED_UPDATE_INCOMPATIBLE, and getting past that
 #    means uninstalling — which drops this handset's enrolment and its local
-#    alert history. Nothing is permanently lost the way it is in Link (Reach
+#    alert history. Nothing is permanently lost the way it is in Link (Sentinel
 #    holds the payload key, so a re-enrolled handset can read new alerts
 #    again), but the handset is off the rota until somebody signs it back in.
 #    Do not do it to a duty phone mid-shift.
 #
 # <b>Push depends on a secret, and its absence is silent.</b> Both Android
 # builds write Platforms/Android/google-services.json from the
-# GOOGLE_SERVICES_JSON secret. Without it the build still succeeds and the
+# MONITOR_GOOGLE_SERVICES_JSON secret. Without it the build still succeeds and the
 # artifact enrols POLL-ONLY — alerts arrive on the poll interval while the app
 # is running, and a handset with the app closed does not ring. v1.17.1 shipped
 # that way and nothing said so: it was found by unzipping the released APK and
@@ -84,10 +84,10 @@ name: CI
 # so nobody "restores parity" by adding them back:
 #
 #  * No GitHub Packages preflight. Register restores Integrity.Client from a
-#    private feed and has to probe the credentials; Hand has no nuget.config and
+#    private feed and has to probe the credentials; Monitor has no nuget.config and
 #    no private dependencies, so restore needs no token at all.
 #  * No appsettings.json placeholder step. Register embeds its copy
-#    unconditionally and CI has to write a stub. Hand's csproj already guards
+#    unconditionally and CI has to write a stub. Monitor's csproj already guards
 #    both git-ignored files with Condition="Exists(...)" — appsettings.json and
 #    Platforms/Android/google-services.json — and the heads are verified to
 #    build without either. A placeholder here would be covering for a problem
@@ -158,7 +158,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout hand
+      - name: Checkout monitor
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # JDK 21: what .NET 10's Android SDK builds against, and what the Android
@@ -179,7 +179,7 @@ jobs:
 
       - name: Write appsettings.json
         env:
-          BASE_URL: ${{ vars.HAND_BASE_URL }}
+          BASE_URL: ${{ vars.MONITOR_BASE_URL }}
         run: bash .github/scripts/write-appsettings.sh
 
       # Android's half of the Firebase configuration. The iOS job has its own
@@ -190,10 +190,10 @@ jobs:
       # delivered, and it was iOS push being switched off that hid the gap.
       - name: Write google-services.json
         env:
-          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+          GOOGLE_SERVICES_JSON: ${{ secrets.MONITOR_GOOGLE_SERVICES_JSON }}
         run: bash .github/scripts/write-google-services.sh
 
-      # Single build with implicit restore. HandAndroidOnly=true trims the app
+      # Single build with implicit restore. MonitorAndroidOnly=true trims the app
       # to just the net10.0-android head, so only the Android graph is restored
       # and built — no iOS/MacCatalyst workloads needed on this runner. Still do
       # NOT pass -f net10.0-android instead: that sets TargetFramework as a
@@ -205,9 +205,9 @@ jobs:
       # trimming. Analyzer errors from .editorconfig break the build here.
       - name: Build & analyze
         run: >
-          dotnet build TheBleedingDeacons.Intergroup.Hand/TheBleedingDeacons.Intergroup.Hand.csproj
+          dotnet build TheBleedingDeacons.Intergroup.Monitor/TheBleedingDeacons.Intergroup.Monitor.csproj
           -c Debug
-          -p:HandAndroidOnly=true
+          -p:MonitorAndroidOnly=true
           -p:ContinuousIntegrationBuild=true
 
       # A separate Release build rather than uploading the Debug output above.
@@ -220,9 +220,9 @@ jobs:
       # so it is both correct and a third the size.
       - name: Build the APK
         run: >
-          dotnet build TheBleedingDeacons.Intergroup.Hand/TheBleedingDeacons.Intergroup.Hand.csproj
+          dotnet build TheBleedingDeacons.Intergroup.Monitor/TheBleedingDeacons.Intergroup.Monitor.csproj
           -c Release
-          -p:HandAndroidOnly=true
+          -p:MonitorAndroidOnly=true
           -p:ContinuousIntegrationBuild=true
 
       # -Signed.apk is the one to keep: .NET Android emits an unsigned
@@ -232,8 +232,8 @@ jobs:
       - name: Upload the APK
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: hand-apk
-          path: TheBleedingDeacons.Intergroup.Hand/bin/Release/net10.0-android/*-Signed.apk
+          name: monitor-apk
+          path: TheBleedingDeacons.Intergroup.Monitor/bin/Release/net10.0-android/*-Signed.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -273,7 +273,7 @@ jobs:
     runs-on: macos-26
 
     steps:
-      - name: Checkout hand
+      - name: Checkout monitor
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
@@ -310,7 +310,7 @@ jobs:
 
       - name: Write appsettings.json
         env:
-          BASE_URL: ${{ vars.HAND_BASE_URL }}
+          BASE_URL: ${{ vars.MONITOR_BASE_URL }}
         run: bash .github/scripts/write-appsettings.sh
 
       # Without this the .ipa builds and enrols poll-only, silently. See the
@@ -318,17 +318,17 @@ jobs:
       # made both of these worth validating rather than merely writing.
       - name: Write GoogleService-Info.plist
         env:
-          GOOGLE_SERVICES_PLIST: ${{ secrets.GOOGLE_SERVICES_PLIST }}
+          GOOGLE_SERVICES_PLIST: ${{ secrets.MONITOR_GOOGLE_SERVICES_PLIST }}
         run: bash .github/scripts/write-google-services-plist.sh
 
       # Release for a device (ios-arm64), unsigned.
       #
-      # HandIosOnly narrows TargetFrameworks to the iOS head. Do NOT reach for
+      # MonitorIosOnly narrows TargetFrameworks to the iOS head. Do NOT reach for
       # -f net10.0-ios instead: that sets TargetFramework as a global property
-      # and forces it onto Hand.Core, which is plain net10.0, and its restore
+      # and forces it onto Monitor.Core, which is plain net10.0, and its restore
       # fails with NU1105. The csproj says the same at more length.
       #
-      # HandUnsigned switches off code signing, which is the whole of what
+      # MonitorUnsigned switches off code signing, which is the whole of what
       # unblocks this job: _DetectSigningIdentity is gated on EnableCodeSigning,
       # so with it false the "No valid iOS code signing keys found in keychain"
       # stop never happens. The entitlements stay declared. It is a global
@@ -341,10 +341,10 @@ jobs:
       # iOS artifact would be a lie the badge could not tell apart.
       - name: Build the iOS head, unsigned
         run: >
-          dotnet build TheBleedingDeacons.Intergroup.Hand/TheBleedingDeacons.Intergroup.Hand.csproj
+          dotnet build TheBleedingDeacons.Intergroup.Monitor/TheBleedingDeacons.Intergroup.Monitor.csproj
           -c Release
-          -p:HandIosOnly=true
-          -p:HandUnsigned=true
+          -p:MonitorIosOnly=true
+          -p:MonitorUnsigned=true
           -p:RuntimeIdentifier=ios-arm64
           -p:ContinuousIntegrationBuild=true
 
@@ -358,7 +358,7 @@ jobs:
       - name: Assemble the .ipa
         run: |
           set -euo pipefail
-          app=$(find TheBleedingDeacons.Intergroup.Hand/bin/Release/net10.0-ios \
+          app=$(find TheBleedingDeacons.Intergroup.Monitor/bin/Release/net10.0-ios \
             -maxdepth 3 -type d -name '*.app' | head -1)
           if [ -z "$app" ]; then
             echo 'No .app was produced; nothing to archive.' >&2
@@ -372,14 +372,14 @@ jobs:
           ls "$app/PlugIns" || echo 'No PlugIns/ in the .app — the extension was not bundled.'
           mkdir -p archive/Payload
           cp -R "$app" archive/Payload/
-          (cd archive && zip -qry ../hand-unsigned.ipa Payload)
-          ls -la hand-unsigned.ipa
+          (cd archive && zip -qry ../monitor-unsigned.ipa Payload)
+          ls -la monitor-unsigned.ipa
 
       - name: Upload the .ipa
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: hand-ipa-unsigned
-          path: hand-unsigned.ipa
+          name: monitor-ipa-unsigned
+          path: monitor-unsigned.ipa
           if-no-files-found: error
           retention-days: 30
 
@@ -393,7 +393,7 @@ jobs:
     # Two ways to ask. workflow_dispatch runs it once, by hand, from the
     # Actions tab -- and from a branch rather than main, because the version
     # job below is gated on refs/heads/main and a dispatch there would cut a
-    # release as well. Setting the repository variable HAND_BUILD_WINDOWS to
+    # release as well. Setting the repository variable MONITOR_BUILD_WINDOWS to
     # `true` turns it on everywhere, permanently, without editing this file.
     #
     # <b>Why it is here at all.</b> The Windows head stopped compiling on
@@ -416,14 +416,14 @@ jobs:
     # the same argument applies to this head the day it is trusted.
     if: >
       github.event_name == 'workflow_dispatch'
-      || vars.HAND_BUILD_WINDOWS == 'true'
+      || vars.MONITOR_BUILD_WINDOWS == 'true'
 
     # Windows is not a preference: the WindowsAppSDK targets and the Windows
     # SDK this head compiles against exist on no other runner.
     runs-on: windows-latest
 
     steps:
-      - name: Checkout hand
+      - name: Checkout monitor
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
@@ -447,7 +447,7 @@ jobs:
       - name: Write appsettings.json
         shell: bash
         env:
-          BASE_URL: ${{ vars.HAND_BASE_URL }}
+          BASE_URL: ${{ vars.MONITOR_BASE_URL }}
         run: bash .github/scripts/write-appsettings.sh
 
       # A compile gate, not an artifact. There is no Release build and nothing
@@ -457,16 +457,16 @@ jobs:
       # one. #57 was CS0759 -- a partial method whose Windows half had kept an
       # old signature -- and Debug catches that in a fraction of the time.
       #
-      # HandWindowsOnly narrows TargetFrameworks to the Windows head. Do NOT
+      # MonitorWindowsOnly narrows TargetFrameworks to the Windows head. Do NOT
       # reach for -f net10.0-windows10.0.19041.0 instead: that sets
-      # TargetFramework as a global property and forces it onto Hand.Core,
+      # TargetFramework as a global property and forces it onto Monitor.Core,
       # which is plain net10.0, and its restore fails with NU1105. The csproj
       # says the same at more length.
       - name: Build & analyze
         run: >
-          dotnet build TheBleedingDeacons.Intergroup.Hand/TheBleedingDeacons.Intergroup.Hand.csproj
+          dotnet build TheBleedingDeacons.Intergroup.Monitor/TheBleedingDeacons.Intergroup.Monitor.csproj
           -c Debug
-          -p:HandWindowsOnly=true
+          -p:MonitorWindowsOnly=true
           -p:ContinuousIntegrationBuild=true
 
   test:
@@ -474,7 +474,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout hand
+      - name: Checkout monitor
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
@@ -485,19 +485,19 @@ jobs:
       - name: Restore local tools (coverlet.console)
         run: dotnet tool restore
 
-      # No MAUI workload and no JDK: Hand.Core and its test project are plain
-      # net10.0. Building the test project pulls Hand.Core in with it.
+      # No MAUI workload and no JDK: Monitor.Core and its test project are plain
+      # net10.0. Building the test project pulls Monitor.Core in with it.
       - name: Build tests
         run: >
-          dotnet build TheBleedingDeacons.Intergroup.Hand.Tests/TheBleedingDeacons.Intergroup.Hand.Tests.csproj
+          dotnet build TheBleedingDeacons.Intergroup.Monitor.Tests/TheBleedingDeacons.Intergroup.Monitor.Tests.csproj
           -c Debug
 
       # xUnit v3 runs on Microsoft.Testing.Platform, so the test project is an
-      # executable. coverlet.console instruments Hand.Core and runs that test
+      # executable. coverlet.console instruments Monitor.Core and runs that test
       # host, producing a Cobertura report. (coverlet's collector / msbuild
       # integrations hook VSTest, which MTP does not use — hence the tool.)
       #
-      # --include narrows the report to Hand.Core: the test assembly and the
+      # --include narrows the report to Monitor.Core: the test assembly and the
       # NuGet dependencies are not what this number is about. The app project
       # is not in it either, because nothing can reference it — that is what
       # the split is for, and what the README says the badge covers.
@@ -508,26 +508,26 @@ jobs:
       # penalise the deprecation instead of the debt.
       - name: Test with coverage
         run: >
-          dotnet coverlet TheBleedingDeacons.Intergroup.Hand.Tests/bin/Debug/net10.0/TheBleedingDeacons.Intergroup.Hand.Tests.dll
+          dotnet coverlet TheBleedingDeacons.Intergroup.Monitor.Tests/bin/Debug/net10.0/TheBleedingDeacons.Intergroup.Monitor.Tests.dll
           --target dotnet
-          --targetargs "TheBleedingDeacons.Intergroup.Hand.Tests/bin/Debug/net10.0/TheBleedingDeacons.Intergroup.Hand.Tests.dll"
+          --targetargs "TheBleedingDeacons.Intergroup.Monitor.Tests/bin/Debug/net10.0/TheBleedingDeacons.Intergroup.Monitor.Tests.dll"
           --format cobertura
           --output coverage/coverage.cobertura.xml
-          --include "[TheBleedingDeacons.Intergroup.Hand.Core]*"
+          --include "[TheBleedingDeacons.Intergroup.Monitor.Core]*"
           --exclude-by-attribute Obsolete
 
       # The Reqnroll suite over the same library, run as its own step rather
       # than folded into the coverage run above. Two reasons: it is a gate in
       # its own right and should say so in the log when it is what broke, and
       # the Coveralls figure goes on meaning what the README says it means —
-      # how well the xUnit suite covers Hand.Core — rather than quietly
+      # how well the xUnit suite covers Monitor.Core — rather than quietly
       # changing the day the specs landed.
       #
       # Scenarios tagged @manual @ignore are on-device acceptance criteria.
       # Reqnroll skips them; nothing here has to filter them out.
       - name: Run the executable specification
         run: >
-          dotnet test TheBleedingDeacons.Intergroup.Hand.Specs/TheBleedingDeacons.Intergroup.Hand.Specs.csproj
+          dotnet test TheBleedingDeacons.Intergroup.Monitor.Specs/TheBleedingDeacons.Intergroup.Monitor.Specs.csproj
           -c Debug
 
       - name: Upload coverage to Coveralls
@@ -585,7 +585,7 @@ jobs:
     # `ios` is in here on purpose, and it is the one entry worth arguing about:
     # a broken iOS head now stops an Android release. That is the right way
     # round while the two heads share every line of code above the platform
-    # folders — a compile error in Hand.Core would break both, and releasing
+    # folders — a compile error in Monitor.Core would break both, and releasing
     # Android from a tree that does not build is how the iOS head would quietly
     # rot back to the state this change took it out of. Drop it from this list
     # the day the iOS head has its own version.
@@ -667,7 +667,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          csproj="TheBleedingDeacons.Intergroup.Hand/TheBleedingDeacons.Intergroup.Hand.csproj"
+          csproj="TheBleedingDeacons.Intergroup.Monitor/TheBleedingDeacons.Intergroup.Monitor.csproj"
 
           before="${{ github.event.before }}"
           if [ -z "$before" ] || [ "$before" = "0000000000000000000000000000000000000000" ] \
@@ -743,7 +743,7 @@ jobs:
             # bump-version.sh refuses to bump on top of by default. Lifting
             # that guard is the entire point of this path, and this loop is
             # what bounds it.
-            export HAND_BUMP_ON_VERSION_COMMIT=1
+            export MONITOR_BUMP_ON_VERSION_COMMIT=1
             if ! bump_and_commit; then
               echo "Nothing left to version once main was taken into account."
               exit 0
@@ -813,12 +813,12 @@ jobs:
         run: dotnet workload install maui-android
 
       # Same script and same rules as the build job — see the long comment in
-      # it. A release APK with no Reach address would be the least useful of
+      # it. A release APK with no Sentinel address would be the least useful of
       # all the artifacts here, since it is the one somebody keeps.
       - name: Write appsettings.json
         if: steps.bump.outputs.version != ''
         env:
-          BASE_URL: ${{ vars.HAND_BASE_URL }}
+          BASE_URL: ${{ vars.MONITOR_BASE_URL }}
         run: bash .github/scripts/write-appsettings.sh
 
       # This one matters more here than in the build job. The build job's
@@ -829,7 +829,7 @@ jobs:
       - name: Write google-services.json
         if: steps.bump.outputs.version != ''
         env:
-          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+          GOOGLE_SERVICES_JSON: ${{ secrets.MONITOR_GOOGLE_SERVICES_JSON }}
         run: bash .github/scripts/write-google-services.sh
 
       # Builds the working tree, which by this point carries the bumped csproj
@@ -837,28 +837,28 @@ jobs:
       - name: Build the release APK
         if: steps.bump.outputs.version != ''
         run: >
-          dotnet build TheBleedingDeacons.Intergroup.Hand/TheBleedingDeacons.Intergroup.Hand.csproj
+          dotnet build TheBleedingDeacons.Intergroup.Monitor/TheBleedingDeacons.Intergroup.Monitor.csproj
           -c Release
-          -p:HandAndroidOnly=true
+          -p:MonitorAndroidOnly=true
           -p:ContinuousIntegrationBuild=true
 
       # -Signed.apk is the one to keep: .NET Android emits an unsigned
       # intermediate alongside it. Renamed for the version so a downloaded file
       # still says what it is once it is sitting in somebody's downloads folder
       # next to four others all called
-      # org.thebleedingdeacons.intergroup.hand-Signed.apk.
+      # org.thebleedingdeacons.intergroup.monitor-Signed.apk.
       - name: Name the APK for its version
         id: apk
         if: steps.bump.outputs.version != ''
         run: |
           set -euo pipefail
-          src=$(ls TheBleedingDeacons.Intergroup.Hand/bin/Release/net10.0-android/*-Signed.apk 2>/dev/null | head -1)
+          src=$(ls TheBleedingDeacons.Intergroup.Monitor/bin/Release/net10.0-android/*-Signed.apk 2>/dev/null | head -1)
           if [ -z "$src" ]; then
             echo 'No -Signed.apk was produced. bin/Release/net10.0-android holds:' >&2
-            ls -l TheBleedingDeacons.Intergroup.Hand/bin/Release/net10.0-android || true
+            ls -l TheBleedingDeacons.Intergroup.Monitor/bin/Release/net10.0-android || true
             exit 1
           fi
-          out="hand-${{ steps.bump.outputs.version }}.apk"
+          out="monitor-${{ steps.bump.outputs.version }}.apk"
           cp "$src" "$out"
           echo "apk=$out" >> "$GITHUB_OUTPUT"
           ls -l "$out"
@@ -880,13 +880,13 @@ jobs:
           ### Before you install it
 
           It is signed with the runner's own throwaway key, which is not the key
-          on any developer machine. If you already have a locally built Hand on
+          on any developer machine. If you already have a locally built Monitor on
           the handset, it will refuse to install over it with
           `INSTALL_FAILED_UPDATE_INCOMPATIBLE`.
 
           Getting past that means uninstalling, which drops **this handset's
           enrolment and its local alert history**. Nothing becomes permanently
-          unreadable — Reach holds the payload key, so a handset that signs in
+          unreadable — Sentinel holds the payload key, so a handset that signs in
           again gets a fresh one and reads new alerts normally — but the handset
           is off the rota until somebody does sign it back in. Not something to
           do to a duty phone mid-shift.

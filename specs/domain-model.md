@@ -1,7 +1,7 @@
-# Hand domain model — alerts, levels, responses
+# Monitor domain model — alerts, levels, responses
 
 The living specification is the set of Reqnroll `.feature` files under
-[`TheBleedingDeacons.Intergroup.Hand.Specs/Features`](../TheBleedingDeacons.Intergroup.Hand.Specs/Features).
+[`TheBleedingDeacons.Intergroup.Monitor.Specs/Features`](../TheBleedingDeacons.Intergroup.Monitor.Specs/Features).
 This document is the narrative overview and glossary behind them: what the
 words mean, which decisions are settled, and which are still assumptions.
 
@@ -13,7 +13,7 @@ and this is what needs correcting.
 ## The core idea
 
 A responder signs in, goes on duty, and puts the handset down. When a plugin
-raises an alert through Reach, the handset rings — loudly, repeatedly, and
+raises an alert through Sentinel, the handset rings — loudly, repeatedly, and
 whether or not the app is on screen — until somebody acknowledges it.
 
 Everything else here is qualification of that sentence: *which* alerts ring
@@ -21,7 +21,7 @@ Everything else here is qualification of that sentence: *which* alerts ring
 to everybody else's copy* when one responder does.
 
 ```
-Reach stores the alert
+Sentinel stores the alert
    ├──(push: sealed, fast, not guaranteed)──┐
    └──(poll: HTTPS, slower, always right)───┴──▶ AdmitAsync ──▶ card + notification + alarm
 ```
@@ -45,13 +45,13 @@ that follows it produce one entry and one alarm rather than two.
   (everybody reads and closes their own copy).
 - **Kind** — what sort of thing happened (`shift_uncovered`, `call_request`).
   Two kinds are not alerts at all: `device_removed` and `message_acknowledged`.
-- **Notice** — Reach talking about another alert rather than raising one:
+- **Notice** — Sentinel talking about another alert rather than raising one:
   an acknowledgement notice or a reply. Cannot itself be replied to.
 - **Outstanding / settled** — a card is settled when this handset has taken
   it on, or when it was never anybody's job. The alarm counts outstanding
   **red** cards, and stops when the last of them is gone.
 - **Meeting mode** — everything still happens, silently.
-- **Payload key** — the secret Reach seals pushes to, issued once at
+- **Payload key** — the secret Sentinel seals pushes to, issued once at
   enrolment and never reissued.
 - **Device token** — the bearer token that proves who this handset is, held
   in platform secure storage.
@@ -69,12 +69,12 @@ arriving mid-call must not leave the siren running after the callback it was
 actually ringing for has been answered.
 
 **An alert with no level falls back to its priority** — `urgent` reads as red,
-anything else as yellow. A Reach that predates the level sends only the old
+anything else as yellow. A Sentinel that predates the level sends only the old
 two-value field, and reading its absent level as "unrecognised, call it
 yellow" would demote every urgent alert that server raises, on the one route
 where the handset is newer than the server.
 
-Three Android channels — `reach_alerts`, `reach_warnings`, `reach_notices` —
+Three Android channels — `monitor_alerts`, `monitor_warnings`, `monitor_notices` —
 because a channel's importance and sound are fixed when it is created. A level
 added later has to be a **new channel**, never an edit to one of these.
 
@@ -82,8 +82,8 @@ added later has to be a **new channel**, never an edit to one of these.
 
 | Response | Button | Pressing it |
 | --- | --- | --- |
-| **first** | Acknowledge | Silences the alarm, tells Reach, **keeps the card** and marks it "Acknowledged by you". The second press closes it. |
-| **none** | Close | Removes the card outright, and still tells Reach — that is how the server learns this handset has dealt with its own copy, and what stops the next poll handing it back. |
+| **first** | Acknowledge | Silences the alarm, tells Sentinel, **keeps the card** and marks it "Acknowledged by you". The second press closes it. |
+| **none** | Close | Removes the card outright, and still tells Sentinel — that is how the server learns this handset has dealt with its own copy, and what stops the next poll handing it back. |
 
 Acknowledging used to remove the card, which took the reference and the *Show
 contact* button away at exactly the moment they started to matter: the
@@ -97,9 +97,9 @@ drill everybody must see) and a blue one can still be somebody's job.
 
 ## When somebody else answers first
 
-Reach sends a second message to every other handset the original went to,
-saying who picked it up. Hand does three things with it, and **none of them is
-special-cased**: Reach raises the notice as blue and Close, and Hand reads
+Sentinel sends a second message to every other handset the original went to,
+saying who picked it up. Monitor does three things with it, and **none of them is
+special-cased**: Sentinel raises the notice as blue and Close, and Monitor reads
 those two fields exactly as it reads them on any other alert.
 
 1. It **never alarms** — blue.
@@ -115,9 +115,9 @@ callback" is worth reading regardless.
 
 ## The two notices that are not alerts
 
-| Kind | What it is | What Hand does |
+| Kind | What it is | What Monitor does |
 | --- | --- | --- |
-| `device_removed` | An administrator has taken this handset off the rota | **A prompt to check, never an instruction to obey.** Asks Reach who it is, and signs out only if Reach no longer knows it. A handset that cannot reach Reach stays signed in. |
+| `device_removed` | An administrator has taken this handset off the rota | **A prompt to check, never an instruction to obey.** Asks Sentinel who it is, and signs out only if Sentinel no longer knows it. A handset that cannot reach Sentinel stays signed in. |
 | `message_acknowledged` | Somebody else answered | Admitted like anything else so it can be read; clears the message it reports on. |
 
 A push registration token outlives the device row it was registered against,
@@ -148,12 +148,12 @@ afterwards. It holds **no contact details** and must not learn to.
 - **The push carries ciphertext and nothing else.** The whole data map is
   sealed to the handset's payload key — AES-256-GCM over gzip — so what
   crosses Google says nothing about who rang. A push that will not open is
-  ignored, reported to Reach once per run, and delivered by the poll instead.
+  ignored, reported to Sentinel once per run, and delivered by the poll instead.
 - **The poll is not optional in spirit.** It covers Windows and macOS
   entirely, catches what FCM dropped, and is the only route left when a push
   token rotates silently. It can be turned off, and that is a real loss.
 - **Contact details are fetched on a tap**, never pushed or polled, because
-  Reach audits every read and they would otherwise sit on a lock screen.
+  Sentinel audits every read and they would otherwise sit on a lock screen.
 - **HTTPS only.** A plaintext address would put the bearer token and every
   alert body on the wire in the clear.
 - **Meeting mode changes the volume, not the rota.** It replaced an on/off
@@ -161,7 +161,7 @@ afterwards. It holds **no contact details** and must not learn to.
   come back on was simply missing, with nobody told.
 - **The lock screen redaction is offered, not imposed.** Android substitutes
   the public version only where the phone's owner has chosen to hide sensitive
-  content; Hand reports which it is getting rather than claiming to prevent it.
+  content; Monitor reports which it is getting rather than claiming to prevent it.
 
 ## Assumptions still open to change
 
