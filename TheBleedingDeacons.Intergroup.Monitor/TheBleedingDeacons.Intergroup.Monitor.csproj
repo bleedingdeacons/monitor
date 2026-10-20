@@ -450,6 +450,28 @@
 		<PackageReference Include="Xamarin.Firebase.Messaging" Version="125.1.1" />
 
 		<!--
+			Native Google sign-in - see NativeGoogleSignIn. Firebase Auth brings
+			Credential Manager, its Play Services provider and the Google ID
+			library with it, at the versions it was built against, so none of
+			them is referenced separately: pinning one here is how two copies
+			of the same .aar end up in the APK.
+		-->
+		<PackageReference Include="Xamarin.Firebase.Auth" Version="124.2.0.1" />
+
+		<!--
+			The one exception, and it is the same problem from the other side.
+			Firebase Auth lifts Fragment, Collection and Tracing to versions that
+			fold their -ktx extensions into the main artifact, while MAUI still
+			pulls the old separate -ktx packages. Both copies of the classes
+			reach D8, which stops with "Type androidx.fragment.app.FragmentKt is
+			defined multiple times". The -ktx packages at the matching versions
+			are empty shims, which is what makes the duplicate go away.
+		-->
+		<PackageReference Include="Xamarin.AndroidX.Fragment.Ktx" Version="1.9.0" />
+		<PackageReference Include="Xamarin.AndroidX.Collection.Ktx" Version="1.6.0.1" />
+		<PackageReference Include="Xamarin.AndroidX.Tracing.Tracing.Ktx" Version="2.0.2" />
+
+		<!--
 			BiometricPrompt, for the optional fingerprint in front of an
 			already-enrolled handset - see AppLock. AndroidX rather than the
 			platform's own android.hardware.biometrics.BiometricPrompt, which
@@ -542,6 +564,17 @@
 		<BundleResource Include="Platforms\iOS\GoogleService-Info.plist"
 		                Link="GoogleService-Info.plist"
 		                Condition="Exists('Platforms\iOS\GoogleService-Info.plist')" />
+	</ItemGroup>
+
+	<!--
+		Native Google sign-in on iOS - see NativeGoogleSignIn. iOS only, not
+		Mac Catalyst: the desktop keeps the browser. Same AdamE family and
+		Firebase version as CloudMessaging above, because the two share
+		Firebase.Core and must agree on it.
+	-->
+	<ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">
+		<PackageReference Include="AdamE.Firebase.iOS.Auth" Version="12.10.0" />
+		<PackageReference Include="AdamE.Google.iOS.SignIn" Version="9.0.0" />
 	</ItemGroup>
 
 	<ItemGroup>

@@ -99,6 +99,23 @@ public sealed class SentinelClient : ISentinelClient
 			cancellationToken);
 	}
 
+	public Task<SentinelResult<DeviceSession>> SignInWithFirebaseAsync(
+		string idToken, string label, string platform, string pushProvider, string pushToken, CancellationToken cancellationToken)
+	{
+		return PostAsync<DeviceSession>(
+			"auth/device/firebase",
+			new Dictionary<string, string>(StringComparer.Ordinal)
+			{
+				["id_token"] = idToken,
+				["label"] = label,
+				["platform"] = platform,
+				["push_provider"] = pushProvider,
+				["push_token"] = pushToken,
+			},
+			token: null,
+			cancellationToken);
+	}
+
 	public Task<SentinelResult<DeviceSession>> SignInWithPasswordAsync(
 		string email, string password, string label, string platform, string pushProvider, string pushToken, CancellationToken cancellationToken)
 	{
@@ -431,6 +448,10 @@ public sealed class SentinelClient : ISentinelClient
 			"sentinel_invalid_credentials" => SentinelFailure.InvalidCredentials,
 			"sentinel_device_not_authenticated" => SentinelFailure.Unauthenticated,
 			"sentinel_rate_limited" => SentinelFailure.RateLimited,
+			// A route this Sentinel does not have, or has but has not been
+			// set up for. Matched on WordPress's own code rather than on 404,
+			// so an edge proxy's 404 page still reads as a server fault.
+			"sentinel_firebase_unavailable" or "rest_no_route" => SentinelFailure.Unavailable,
 			_ => response.StatusCode switch
 			{
 				HttpStatusCode.Unauthorized => SentinelFailure.Unauthenticated,

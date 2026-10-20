@@ -219,6 +219,10 @@ internal sealed class FakeSentinelClient : ISentinelClient
 		string code, string label, string platform, string pushProvider, string pushToken, CancellationToken cancellationToken) =>
 		Task.FromResult(Session);
 
+	public Task<SentinelResult<DeviceSession>> SignInWithFirebaseAsync(
+		string idToken, string label, string platform, string pushProvider, string pushToken, CancellationToken cancellationToken) =>
+		Task.FromResult(Session);
+
 	public Task<SentinelResult<DeviceSession>> SignInWithPasswordAsync(
 		string email, string password, string label, string platform, string pushProvider, string pushToken, CancellationToken cancellationToken) =>
 		Task.FromResult(Session);

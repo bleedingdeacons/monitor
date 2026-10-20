@@ -141,6 +141,26 @@ public sealed class SentinelClientTests
 		Assert.Contains("push_provider=fcm", handler.Bodies[0], StringComparison.Ordinal);
 	}
 
+	/// <summary>
+	/// Native Google sign-in posts the Firebase ID token, untouched, to its
+	/// own route alongside the same device fields every enrolment sends.
+	/// </summary>
+	[Fact]
+	public async Task PostsTheFirebaseTokenToItsOwnRoute()
+	{
+		var (client, handler) = Ok("""{"token":"abc","device_id":1}""");
+
+		var result = await client.SignInWithFirebaseAsync(
+			"header.payload.signature", "Duty phone", "ios", "fcm", "tok", CancellationToken.None);
+
+		Assert.True(result.Success);
+		Assert.Equal(HttpMethod.Post, handler.Requests[0].Method);
+		Assert.EndsWith("/wp-json/sentinel/v1/auth/device/firebase", handler.Requests[0].RequestUri!.AbsolutePath, StringComparison.Ordinal);
+		Assert.Contains("id_token=header.payload.signature", handler.Bodies[0], StringComparison.Ordinal);
+		Assert.Contains("platform=ios", handler.Bodies[0], StringComparison.Ordinal);
+		Assert.Contains("push_token=tok", handler.Bodies[0], StringComparison.Ordinal);
+	}
+
 	[Fact]
 	public async Task SendsTheTokenAsABearerHeaderWhenThereIsOne()
 	{
@@ -362,6 +382,8 @@ public sealed class SentinelClientTests
 	[InlineData("sentinel_invalid_credentials", 401, SentinelFailure.InvalidCredentials)]
 	[InlineData("sentinel_device_not_authenticated", 401, SentinelFailure.Unauthenticated)]
 	[InlineData("sentinel_rate_limited", 429, SentinelFailure.RateLimited)]
+	[InlineData("sentinel_firebase_unavailable", 503, SentinelFailure.Unavailable)]
+	[InlineData("rest_no_route", 404, SentinelFailure.Unavailable)]
 	public async Task MapsReachsOwnErrorCode(string code, int status, SentinelFailure expected)
 	{
 		var body = """{"code":"CODE","message":"Nope.","data":{"status":999}}"""

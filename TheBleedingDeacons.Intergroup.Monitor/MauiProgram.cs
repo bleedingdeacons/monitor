@@ -144,6 +144,7 @@ public static class MauiProgram
 		// and a singleton for the same reason as the lock above.
 		builder.Services.AddSingleton<IWindowVisibility, WindowVisibility>();
 
+		builder.Services.AddSingleton<INativeGoogleSignIn, NativeGoogleSignIn>();
 		builder.Services.AddSingleton<IDeviceAuthService, DeviceAuthService>();
 
 		// The alarm owns audio and vibration and must outlive any page: an
