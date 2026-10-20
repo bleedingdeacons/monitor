@@ -140,9 +140,9 @@
 			Register learned both of these the hard way; see the long note in its
 			csproj before splitting these across per-configuration groups.
 		-->
-		<ApplicationDisplayVersion>1.23.0</ApplicationDisplayVersion>
+		<ApplicationDisplayVersion>1.23.1</ApplicationDisplayVersion>
 		<Version>$(ApplicationDisplayVersion)</Version>
-		<ApplicationVersion>64</ApplicationVersion>
+		<ApplicationVersion>65</ApplicationVersion>
 
 		<!--
 			Platform floors, matching Register's .NET 10 values.
