@@ -16,6 +16,13 @@ namespace TheBleedingDeacons.Intergroup.Monitor.Services;
 /// the code is traded for the real credential over TLS in a direct POST.
 /// That is RFC 8252, and the reason it exists.</para>
 ///
+/// <para>Google on Android and iOS skips the browser: the platform's own
+/// account picker, then Firebase Auth, then the Firebase ID token straight
+/// to Sentinel over TLS — see <see cref="INativeGoogleSignIn"/>. Wherever
+/// that cannot be done, on the handset or on the server, it quietly falls
+/// back to the browser path above, which is also what Microsoft and
+/// Facebook still use.</para>
+///
 /// <para>The password path skips all of that. It is what the Windows head
 /// uses when it is not packaged as MSIX and so cannot claim a custom
 /// scheme, and it is the fallback anywhere the browser round trip
@@ -23,21 +30,27 @@ namespace TheBleedingDeacons.Intergroup.Monitor.Services;
 /// </summary>
 public sealed class DeviceAuthService : IDeviceAuthService
 {
+	/// <summary>The provider name the sign-in page sends for Google.</summary>
+	private const string GoogleProvider = "google";
+
 	private readonly ISentinelClient _sentinel;
 	private readonly IConfigurationService _configuration;
 	private readonly IPushRegistrar _push;
 	private readonly ILockScreenPrivacy _lockScreen;
+	private readonly INativeGoogleSignIn _nativeGoogle;
 
 	public DeviceAuthService(
 		ISentinelClient sentinel,
 		IConfigurationService configuration,
 		IPushRegistrar push,
-		ILockScreenPrivacy lockScreen)
+		ILockScreenPrivacy lockScreen,
+		INativeGoogleSignIn nativeGoogle)
 	{
 		_sentinel = sentinel ?? throw new ArgumentNullException(nameof(sentinel));
 		_configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
 		_push = push ?? throw new ArgumentNullException(nameof(push));
 		_lockScreen = lockScreen ?? throw new ArgumentNullException(nameof(lockScreen));
+		_nativeGoogle = nativeGoogle ?? throw new ArgumentNullException(nameof(nativeGoogle));
 	}
 
 	public DeviceSession? Current { get; private set; }
@@ -87,6 +100,63 @@ public sealed class DeviceAuthService : IDeviceAuthService
 
 	public async Task<SentinelResult<DeviceSession>> SignInWithSsoAsync(
 		string provider, CancellationToken cancellationToken = default)
+	{
+		if (provider == GoogleProvider && _nativeGoogle.IsAvailable)
+		{
+			var native = await SignInWithNativeGoogleAsync(cancellationToken).ConfigureAwait(false);
+			if (native is not null)
+			{
+				return native;
+			}
+
+			// Null means native sign-in could not be done here at all — not
+			// that the responder refused or was refused. The browser is the
+			// same Google account by another road, so take it rather than
+			// show an error they can do nothing about.
+		}
+
+		return await SignInWithBrowserAsync(provider, cancellationToken).ConfigureAwait(false);
+	}
+
+	/// <summary>
+	/// Google through the platform's own picker, then Firebase, then Sentinel.
+	/// Null when either end cannot do it and the browser should be used.
+	/// </summary>
+	private async Task<SentinelResult<DeviceSession>?> SignInWithNativeGoogleAsync(CancellationToken cancellationToken)
+	{
+		var signIn = await _nativeGoogle.SignInAsync(cancellationToken).ConfigureAwait(false);
+
+		switch (signIn.Outcome)
+		{
+			case NativeGoogleSignInOutcome.Cancelled:
+				return SentinelResult<DeviceSession>.Fail(SentinelFailure.None, string.Empty);
+			case NativeGoogleSignInOutcome.Unavailable:
+				return null;
+		}
+
+		var (pushProvider, pushToken) = await PushDetailsAsync().ConfigureAwait(false);
+
+		var result = await _sentinel.SignInWithFirebaseAsync(
+			signIn.IdToken,
+			_configuration.DeviceLabel,
+			PlatformName(),
+			pushProvider,
+			pushToken,
+			cancellationToken).ConfigureAwait(false);
+
+		if (result.Failure == SentinelFailure.Unavailable)
+		{
+			// Sentinel is older than the route, or has no Firebase project
+			// to check the token against. The token is spent either way.
+			Log.Information("Sentinel does not offer native Google sign-in; using the browser");
+			return null;
+		}
+
+		return await StoreAsync(result).ConfigureAwait(false);
+	}
+
+	private async Task<SentinelResult<DeviceSession>> SignInWithBrowserAsync(
+		string provider, CancellationToken cancellationToken)
 	{
 		string code;
 

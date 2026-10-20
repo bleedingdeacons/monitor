@@ -189,6 +189,15 @@ platform secure storage (Android keystore, Apple keychain, DPAPI):
   which Monitor trades for the token over TLS. The code rather than the token
   travels through the browser, because a redirect lands in history and can
   be read by anything else registered for the scheme (RFC 8252).
+- **Google, natively** — on Android and iOS the Google button skips the
+  browser: the platform's own account picker (Credential Manager on
+  Android, GoogleSignIn on iOS), then Firebase Auth, then the Firebase ID
+  token straight to `/auth/device/firebase`. Sentinel pins it to the
+  Firebase project of its FCM service account. Monitor signs out of
+  Firebase as soon as it has the token; the device token is still the only
+  thing kept. Anywhere this cannot work — no Google client in the Firebase
+  config, an unregistered signing key, a Sentinel without the route — the
+  button quietly takes the browser route above instead.
 - **Password** — straight to Sentinel, no browser. This is what the Windows
   head uses when it is not packaged as MSIX and so cannot claim a custom
   URI scheme, and it is the fallback anywhere the browser flow fails.
@@ -533,6 +542,13 @@ These need accounts I cannot act for:
    `MONITOR_GOOGLE_SERVICES_JSON` and `MONITOR_GOOGLE_SERVICES_PLIST` secrets. Then paste
    the service-account key file (*Project settings → Service accounts →
    Generate new private key*) into **Sentinel → Settings**.
+   For native Google sign-in, also: turn on **Authentication → Sign-in
+   method → Google**; add the SHA-1 of every key that signs the Android app
+   (the upload key, Play's app-signing key, and the debug key `/kick`
+   installs with) under the Android app's settings; then download both
+   files again — the Google client ids are only in them after that — and
+   update the two secrets. CI registers the iOS file's `REVERSED_CLIENT_ID`
+   as a URL scheme. Until all that is done the Google button uses the browser.
 2. **APNs** — create an APNs key in the Apple Developer portal and upload it
    to Firebase, so FCM can deliver to iOS. This needs a **paid** Developer
    Program team: the `aps-environment` entitlement is not available to a free

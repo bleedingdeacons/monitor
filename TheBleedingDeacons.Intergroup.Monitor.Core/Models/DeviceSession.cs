@@ -135,4 +135,11 @@ public enum SentinelFailure
 
 	/// <summary>Anything else the server said no to.</summary>
 	Server,
+
+	/// <summary>
+	/// The server does not offer what was asked — a Sentinel older than
+	/// the route, or one with native sign-in not set up. Not the
+	/// responder's problem: the caller falls back to the browser.
+	/// </summary>
+	Unavailable,
 }

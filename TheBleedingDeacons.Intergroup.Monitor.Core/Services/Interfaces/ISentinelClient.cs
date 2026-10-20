@@ -19,6 +19,14 @@ public interface ISentinelClient
 	Task<SentinelResult<DeviceSession>> ExchangeCodeAsync(
 		string code, string label, string platform, string pushProvider, string pushToken, CancellationToken cancellationToken);
 
+	/// <summary>
+	/// Enrol with a Firebase ID token from native Google sign-in. Fails
+	/// with <see cref="SentinelFailure.Unavailable"/> when this Sentinel
+	/// does not offer it — too old, or no Firebase project set up.
+	/// </summary>
+	Task<SentinelResult<DeviceSession>> SignInWithFirebaseAsync(
+		string idToken, string label, string platform, string pushProvider, string pushToken, CancellationToken cancellationToken);
+
 	/// <summary>Enrol with an email and password, no browser involved.</summary>
 	Task<SentinelResult<DeviceSession>> SignInWithPasswordAsync(
 		string email, string password, string label, string platform, string pushProvider, string pushToken, CancellationToken cancellationToken);
