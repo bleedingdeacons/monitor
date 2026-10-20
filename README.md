@@ -445,7 +445,7 @@ app that cannot reach a server. That is what a fork gets.
 ### Tests and coverage
 
 ```bash
-dotnet test TheBleedingDeacons.Intergroup.Monitor.Tests
+dotnet test --project TheBleedingDeacons.Intergroup.Monitor.Tests
 ```
 
 The suite is xUnit v3 on Microsoft.Testing.Platform, the same arrangement
@@ -480,7 +480,7 @@ counting it would penalise the deprecation rather than the debt.
 ### The executable specification
 
 ```bash
-dotnet test TheBleedingDeacons.Intergroup.Monitor.Specs
+dotnet test --project TheBleedingDeacons.Intergroup.Monitor.Specs
 ```
 
 Reqnroll over xUnit v3, with Shouldly for the assertions — the same tooling
